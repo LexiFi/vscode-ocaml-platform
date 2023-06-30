@@ -278,6 +278,8 @@ module Selection : sig
     -> t
 
   val isReversed : t -> bool
+
+  val with_ : t -> ?start:Position.t -> ?end_:Position.t -> unit -> Range.t
 end
 
 module TextEditorEdit : sig
@@ -853,6 +855,32 @@ module QuickPickOptions : sig
     -> t
 end
 
+(* Unused and untested module,
+   may be useful along with Window.createQuickPick *)
+module QuickPick : sig
+  include Js.T
+
+  val activeItems : t -> Ojs.t list
+
+  val busy : t -> bool
+
+  val items : t -> Ojs.t list
+
+  val matchOnDescription : t -> bool
+
+  val selectedItems : t -> Ojs.t list
+
+  val title : t -> string
+
+  val onDidAccept : t -> unit Event.t
+
+  val set_busy : t -> bool -> unit
+
+  val set_matchOnDescription : t -> bool -> unit
+
+  val set_title : t -> string -> unit
+end
+
 module ProviderResult : sig
   type 'a t =
     [ `Value of 'a option
@@ -1001,6 +1029,26 @@ module Diagnostic : sig
   val tags : t -> DiagnosticTag.t list option
 
   val make : ?severity:DiagnosticSeverity.t -> message:string -> Range.t -> t
+end
+
+module DiagnosticCollection : sig
+  include Js.T
+
+  val name : t -> string
+
+  val clear : t -> unit
+
+  val delete : t -> Uri.t -> unit
+
+  val dispose : t -> unit
+
+  val get : t -> Uri.t -> Diagnostic.t list option
+
+  val has : t -> Uri.t -> bool
+
+  val set : t -> Uri.t -> Diagnostic.t list option -> unit
+
+  val to_disposable: t -> Disposable.t [@@js.cast]
 end
 
 module TextDocumentShowOptions : sig
@@ -1171,6 +1219,8 @@ module Memento : sig
   val get_default : 'a Js.t -> t -> key:string -> defaultValue:'a -> 'a
 
   val update : t -> key:string -> value:Js.Any.t -> Promise.void
+
+  val unset : t -> key:string -> Promise.void
 end
 
 module EnvironmentVariableMutatorType : sig
@@ -1482,6 +1532,27 @@ module DocumentFormattingEditProvider : sig
   val create :
        provideDocumentFormattingEdits:
          (   document:TextDocument.t
+          -> options:FormattingOptions.t
+          -> token:CancellationToken.t
+          -> TextEdit.t list ProviderResult.t)
+    -> t
+end
+
+module DocumentRangeFormattingEditProvider : sig
+  include Js.T
+
+  val provideDocumentRangeFormattingEdits :
+       t
+    -> document:TextDocument.t
+    -> range:Range.t
+    -> options:FormattingOptions.t
+    -> token:CancellationToken.t
+    -> TextEdit.t list ProviderResult.t
+
+  val create :
+       provideDocumentRangeFormattingEdits:
+         (   document:TextDocument.t
+          -> range:Range.t
           -> options:FormattingOptions.t
           -> token:CancellationToken.t
           -> TextEdit.t list ProviderResult.t)
@@ -2264,11 +2335,52 @@ module RegisterCustomEditorProviderOptions : sig
 end
 
 module Window : sig
+  (* These tab/tab-related bindings were unnecessary
+    but may come in handy someday *)
+  module rec Tab : sig
+    include Js.T
+
+    val group : t -> TabGroup.t
+    val isActive : t -> bool
+  end
+  and TabGroup : sig
+    include Js.T
+
+    val activeTab : t -> Tab.t
+    val isActive : t -> bool
+    val tabs : t -> Tab.t list
+  end
+
+  module TabGroupChangeEvent : sig
+    include Js.T
+
+    val changed : t -> TabGroup.t list
+    val closed : t -> TabGroup.t list
+    val opened : t -> TabGroup.t list
+  end
+
+  module TabChangeEvent : sig
+    include Js.T
+
+    val changed : t -> Tab.t list
+    val closed : t -> Tab.t list
+    val opened : t -> Tab.t list
+  end
+
+  module TabGroups : sig
+    include Js.T
+
+    val activeTabGroup : t -> TabGroup.t
+    val all : t -> TabGroup.t list
+    val onDidChangeTabGroups : t -> TabGroupChangeEvent.t Event.t
+    val onDidChangeTabs : t -> TabChangeEvent.t Event.t
+  end
+
   val activeTextEditor : unit -> TextEditor.t option
 
   val visibleTextEditors : unit -> TextEditor.t list
 
-  val onDidChangeActiveTextEditor : unit -> TextEditor.t Event.t
+  val onDidChangeActiveTextEditor : unit -> TextEditor.t option Event.t
 
   val onDidChangeVisibleTextEditors : unit -> TextEditor.t list Event.t
 
@@ -2281,6 +2393,9 @@ module Window : sig
   val onDidOpenTerminal : unit -> Terminal.t Event.t
 
   val onDidCloseTerminal : unit -> Terminal.t Event.t
+
+  (* Unused binding that goes with the other tab-related bindings *)
+  val tabGroups : unit -> TabGroups.t [@@js.get]
 
   val showTextDocument :
        document:[ `TextDocument of TextDocument.t | `Uri of Uri.t ]
@@ -2324,6 +2439,11 @@ module Window : sig
     -> unit
     -> string option Promise.t
 
+  (* Unused binding, may be useful later on *)
+  val createQuickPick :
+        QuickPickItem.t list
+    -> QuickPick.t
+
   val showInputBox :
        ?options:InputBoxOptions.t
     -> ?token:CancellationToken.t
@@ -2342,7 +2462,7 @@ module Window : sig
     -> 'a Promise.t
 
   val createStatusBarItem :
-    ?alignment:StatusBarAlignment.t -> ?priority:int -> unit -> StatusBarItem.t
+    ?id:string -> ?alignment:StatusBarAlignment.t -> ?priority:int -> unit -> StatusBarItem.t
 
   val createTerminal :
        ?name:string
@@ -2414,12 +2534,19 @@ module Languages : sig
     -> provider:DocumentFormattingEditProvider.t
     -> Disposable.t
 
+  val registerDocumentRangeFormattingEditProvider :
+       selector:DocumentSelector.t
+    -> provider:DocumentRangeFormattingEditProvider.t
+    -> Disposable.t
+
   val registerHoverProvider :
     selector:DocumentSelector.t -> provider:HoverProvider.t -> Disposable.t
 
   val getDiagnostics : Uri.t -> Diagnostic.t list
 
   val getDiagnostics_all : unit -> (Uri.t * Diagnostic.t list) list
+
+  val createDiagnosticCollection : name:string option -> DiagnosticCollection.t
 end
 
 module Tasks : sig

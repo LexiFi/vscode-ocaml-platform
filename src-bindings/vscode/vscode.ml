@@ -1081,6 +1081,36 @@ module QuickPickOptions = struct
       [@@js.builder]]
 end
 
+(* Unused and untested module,
+   may be useful along with Window.createQuickPick *)
+module QuickPick = struct
+  include Interface.Make ()
+
+  module OnDidAccept = Event.Make (Js.Unit)
+
+  include
+    [%js:
+    val activeItems : t -> Ojs.t list [@@js.get]
+
+    val busy : t -> bool [@@js.get]
+
+    val items : t -> Ojs.t list [@@js.get]
+
+    val matchOnDescription : t -> bool [@@js.get]
+
+    val selectedItems : t -> Ojs.t list [@@js.get]
+
+    val title : t -> string [@@js.get]
+
+    val onDidAccept : t -> OnDidAccept.t [@@js.get]
+
+    val set_busy : t -> bool -> unit [@@js.set]
+
+    val set_matchOnDescription : t -> bool -> unit [@@js.set]
+
+    val set_title : t -> string -> unit [@@js.set]]
+end
+
 module ProviderResult = struct
   type 'a t =
     [ `Value of 'a or_undefined
@@ -1294,6 +1324,28 @@ module Diagnostic = struct
   let make ?severity ~message range = make ~range ~message ?severity ()
 end
 
+module DiagnosticCollection = struct
+  include Interface.Make ()
+
+  include
+    [%js:
+    val name : t -> string [@@js.get]
+
+    val clear : t -> unit [@@js.call]
+
+    val delete : t -> Uri.t -> unit [@@js.call]
+
+    val dispose : t -> unit [@@js.call]
+
+    val get : t -> Uri.t -> Diagnostic.t list option [@@js.call]
+
+    val has : t -> Uri.t -> bool [@@js.call]
+
+    val set : t -> Uri.t -> Diagnostic.t list option -> unit [@@js.call]
+
+    val to_disposable: t -> Disposable.t [@@js.cast]]
+end
+
 module TextDocumentShowOptions = struct
   include Interface.Make ()
 
@@ -1505,6 +1557,9 @@ module OutputChannel = struct
   let disposable this = Disposable.make ~dispose:(fun () -> dispose this)
 end
 
+external pure_js_expr: string -> Ojs.t = "caml_pure_js_expr"
+let undefined = pure_js_expr "undefined"
+
 module Memento = struct
   include Interface.Make ()
 
@@ -1520,6 +1575,13 @@ module Memento = struct
       ~(defaultValue : a) : a =
     let defaultValue = [%js.of: T.t] defaultValue in
     [%js.to: T.t] (get_default this ~key ~defaultValue)
+
+  (* This should be defined here and not in kv.ml since kv.ml
+     is meant to work only with string values. Could maybe use
+     js.cast attribute from undefined to string there, but it's
+     just probably better to keep this here. *)
+  let unset (this : t) ~(key : string) : Promise.void =
+    update this ~key ~value:undefined
 end
 
 module EnvironmentVariableMutatorType = struct
@@ -1914,6 +1976,31 @@ module DocumentFormattingEditProvider = struct
     val create :
          provideDocumentFormattingEdits:
            (   document:TextDocument.t
+            -> options:FormattingOptions.t
+            -> token:CancellationToken.t
+            -> TextEdit.t list ProviderResult.t)
+      -> t
+      [@@js.builder]]
+end
+
+module DocumentRangeFormattingEditProvider = struct
+  include Interface.Make ()
+
+  include
+    [%js:
+    val provideDocumentRangeFormattingEdits :
+         t
+      -> document:TextDocument.t
+      -> range:Range.t
+      -> options:FormattingOptions.t
+      -> token:CancellationToken.t
+      -> TextEdit.t list ProviderResult.t
+      [@@js.call]
+
+    val create :
+         provideDocumentRangeFormattingEdits:
+           (   document:TextDocument.t
+            -> range:Range.t
             -> options:FormattingOptions.t
             -> token:CancellationToken.t
             -> TextEdit.t list ProviderResult.t)
@@ -2943,11 +3030,82 @@ module RegisterCustomEditorProviderOptions = struct
 end
 
 module Window = struct
-  module OnDidChangeActiveTextEditor = Event.Make (TextEditor)
+  module OnDidChangeActiveTextEditor = Event.Make (Js.Or_undefined (TextEditor))
   module OnDidChangeVisibleTextEditors = Event.Make (Js.List (TextEditor))
   module OnDidChangeActiveTerminal = Event.Make (Js.Or_undefined (Terminal))
   module OnDidOpenTerminal = Event.Make (Terminal)
   module OnDidCloseTerminal = Event.Make (Terminal)
+
+  (* These tab/tab-related bindings were unnecessary
+     but may come in handy someday *)
+  module rec Tab : sig
+    include Js.T
+
+    val group : t -> TabGroup.t
+    val isActive : t -> bool
+  end = struct
+    include Interface.Make()
+
+    include
+    [%js:
+      val group : t -> TabGroup.t [@@js.get]
+      val isActive : t -> bool [@@js.get]
+    ]
+  end
+
+  and TabGroup : sig
+    include Js.T
+
+    val activeTab : t -> Tab.t
+    val isActive : t -> bool
+    val tabs : t -> Tab.t list
+  end = struct
+    include Interface.Make()
+
+    include
+    [%js:
+      val activeTab : t -> Tab.t [@@js.get]
+      val isActive : t -> bool [@@js.get]
+      val tabs : t -> Tab.t list [@@js.get]
+    ]
+  end
+
+  module TabGroupChangeEvent = struct
+    include Interface.Make ()
+
+    include
+    [%js:
+      val changed : t -> TabGroup.t list [@@js.get]
+      val closed : t -> TabGroup.t list [@@js.get]
+      val opened : t -> TabGroup.t list [@@js.get]
+    ]
+  end
+
+  module TabChangeEvent = struct
+    include Interface.Make ()
+
+    include
+    [%js:
+      val changed : t -> Tab.t list [@@js.get]
+      val closed : t -> Tab.t list [@@js.get]
+      val opened : t -> Tab.t list [@@js.get]
+    ]
+  end
+
+  module TabGroups = struct
+    include Interface.Make()
+
+    module OnDidChangeTabGroups = Event.Make (TabGroupChangeEvent)
+    module OnDidChangeTabs = Event.Make (TabChangeEvent)
+
+    include
+    [%js:
+      val activeTabGroup : t -> TabGroup.t [@@js.get]
+      val all : t -> TabGroup.t list [@@js.get]
+      val onDidChangeTabGroups : t -> OnDidChangeTabGroups.t [@@js.get]
+      val onDidChangeTabs : t -> OnDidChangeTabs.t [@@js.get]
+    ]
+  end
 
   include
     [%js:
@@ -2976,6 +3134,9 @@ module Window = struct
 
     val onDidCloseTerminal : unit -> OnDidCloseTerminal.t
       [@@js.get "vscode.window.onDidCloseTerminal"]
+
+    (* Unused binding that goes with the other tab-related bindings *)
+    val tabGroups : unit -> TabGroups.t [@@js.get]
 
     val showTextDocument :
          document:
@@ -3026,6 +3187,12 @@ module Window = struct
       -> string or_undefined Promise.t
       [@@js.global "vscode.window.showQuickPick"]
 
+    (* Unused binding, may be useful later on *)
+    val createQuickPick :
+         QuickPickItem.t list
+      -> QuickPick.t
+      [@@js.global "vscode.window.createQuickPick"]
+
     val showInputBox :
          ?options:InputBoxOptions.t
       -> ?token:CancellationToken.t
@@ -3047,7 +3214,8 @@ module Window = struct
       [@@js.global "vscode.window.withProgress"]
 
     val createStatusBarItem :
-         ?alignment:StatusBarAlignment.t
+         ?id:string
+      -> ?alignment:StatusBarAlignment.t
       -> ?priority:int
       -> unit
       -> StatusBarItem.t
@@ -3207,6 +3375,12 @@ module Languages = struct
       -> Disposable.t
       [@@js.global "vscode.languages.registerDocumentFormattingEditProvider"]
 
+    val registerDocumentRangeFormattingEditProvider :
+        selector:DocumentSelector.t
+      -> provider:DocumentRangeFormattingEditProvider.t
+      -> Disposable.t
+      [@@js.global "vscode.languages.registerDocumentRangeFormattingEditProvider"]
+
     val registerHoverProvider :
       selector:DocumentSelector.t -> provider:HoverProvider.t -> Disposable.t
       [@@js.global "vscode.languages.registerHoverProvider"]
@@ -3215,7 +3389,10 @@ module Languages = struct
       [@@js.global "vscode.languages.getDiagnostics"]
 
     val getDiagnostics_all : unit -> (Uri.t * Diagnostic.t list) list
-      [@@js.global "vscode.languages.getDiagnostics"]]
+      [@@js.global "vscode.languages.getDiagnostics"]
+
+    val createDiagnosticCollection : name:string option -> DiagnosticCollection.t
+      [@@js.global "vscode.languages.createDiagnosticCollection"]]
 end
 
 module Tasks = struct

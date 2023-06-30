@@ -611,8 +611,11 @@ let onDidCloseTextDocument_listener instance (document : TextDocument.t) =
 let register extension instance =
   (*Register listener that monitors active editor change. *)
   let listener text_editor =
-    Handlers.unpwrap
-      (Handlers.w1 (onDidChangeActiveTextEditor_listener instance) text_editor)
+    match text_editor with
+    | Some te ->
+      Handlers.unpwrap
+        (Handlers.w1 (onDidChangeActiveTextEditor_listener instance) te)
+    | None -> ()
   in
   let disposable = Window.onDidChangeActiveTextEditor () ~listener () in
   Vscode.ExtensionContext.subscribe extension ~disposable;
